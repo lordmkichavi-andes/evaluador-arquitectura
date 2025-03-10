@@ -1,0 +1,30 @@
+{
+  "classes": [
+    "Orquestador",
+    "ServicioDominio",
+    "AdaptadorDB",
+    "AdaptadorPagoExterno"
+  ],
+  "associations": [
+    [
+      "Orquestador",
+      "ServicioDominio",
+      "--"
+    ],
+    [
+      "Orquestador",
+      "AdaptadorPagoExterno",
+      "..>"
+    ],
+    [
+      "ServicioDominio",
+      "AdaptadorDB",
+      "o--"
+    ],
+    [
+      "ServicioDominio",
+      "AdaptadorPagoExterno",
+      "*--"
+    ]
+  ]
+}

@@ -1,0 +1,21 @@
+@startuml
+skinparam packageStyle rectangle
+
+package "Dominio" {
+  class ServicioDominio
+}
+
+package "Infraestructura" {
+  class AdaptadorDB
+  class AdaptadorPagoExterno
+}
+
+package "Aplicacion" {
+  class Orquestador
+}
+
+Orquestador --> ServicioDominio
+ServicioDominio --> AdaptadorDB
+ServicioDominio --> AdaptadorPagoExterno
+
+@enduml

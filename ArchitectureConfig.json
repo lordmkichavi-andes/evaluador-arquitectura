@@ -1,0 +1,14 @@
+{
+  "engine_type": "huggingface",
+  "model_name": "distilgpt2",
+
+  "general_rules_file": "rules/general_rules.md",
+  "requirements_file": "rules/requirements.md",
+
+  "xmi_arch_file": "build/plantuml_arch.json",
+  "detected_file": "build/detected_relations.json",
+
+  "behavior": "recommend_only",
+  "threshold": 0.7,
+  "token_limit": 3000
+}

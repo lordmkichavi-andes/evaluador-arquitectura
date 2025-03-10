@@ -1,0 +1,20 @@
+{
+  "detected_relations": [
+    [
+      "Orquestador",
+      "ServicioDominio"
+    ],
+    [
+      "Orquestador",
+      "AdaptadorPagoExterno"
+    ],
+    [
+      "ServicioDominio",
+      "AdaptadorDB"
+    ],
+    [
+      "ServicioDominio",
+      "AdaptadorPagoExterno"
+    ]
+  ]
+}

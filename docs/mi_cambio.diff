@@ -1,0 +1,6 @@
++++ b/src/diagram.py
+@@ -0,0 +1,4 @@
++ Orquestador -> ServicioDominio
++ Orquestador -> AdaptadorPagoExterno
++ ServicioDominio -> AdaptadorDB
++ ServicioDominio -> AdaptadorPagoExterno

@@ -1,0 +1,17 @@
+@startuml
+skinparam classAttributeIconSize 0
+
+class Orquestador
+class ServicioDominio
+class AdaptadorDB
+class AdaptadorPagoExterno
+
+Orquestador -- ServicioDominio
+
+Orquestador ..> AdaptadorPagoExterno
+
+ServicioDominio o-- AdaptadorDB
+
+ServicioDominio *-- AdaptadorPagoExterno
+
+@enduml
