@@ -5,12 +5,11 @@ import os
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--diff_file", required=True, help="Ruta al archivo .diff con las líneas + A -> B")
+    parser.add_argument("--diff_file", required=True, help="Ruta al .diff .....")
     args = parser.parse_args()
 
     output_dir = "build"
     output_file = os.path.join(output_dir, "detected_relations.json")
-
     os.makedirs(output_dir, exist_ok=True)
 
     with open(args.diff_file, "r", encoding="utf-8") as df:

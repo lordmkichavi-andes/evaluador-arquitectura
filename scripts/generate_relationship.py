@@ -1,4 +1,3 @@
-import argparse
 import re
 import json
 import os
@@ -27,6 +26,7 @@ def main():
     parser.add_argument("plantuml_file")
     parser.add_argument("--output", default="build/plantuml_arch.json")
     args = parser.parse_args()
+
     os.makedirs("build", exist_ok=True)
     classes, associations = parse_plantuml(args.plantuml_file)
     data = {
