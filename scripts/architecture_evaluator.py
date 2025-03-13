@@ -2,6 +2,7 @@ import re
 import requests
 import json
 import os
+import difflib
 
 def load_text_file(path):
     if os.path.exists(path):
@@ -26,17 +27,58 @@ def azure_openai_inference(prompt, endpoint, api_key, deployment, max_tokens=800
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"]
 
-def summarize_code_changes(changes, max_files=5):
-    lines = []
-    for i, c in enumerate(changes):
-        if i >= max_files:
-            lines.append("... (Hay más archivos modificados) ...")
+
+def summarize_code_changes(
+        changes,
+        max_char_length=2000,
+        max_files=10,
+        max_lines_per_file=10
+):
+    lines_out = []
+    total_char_count = 0
+    displayed_files = 0
+
+    for i, change in enumerate(changes):
+        if displayed_files >= max_files:
+            lines_out.append(f"... (Existen {len(changes) - i} archivos adicionales) ...")
             break
-        path = c.get("path", "")
-        added = c["after"].count("\n") + 1 if c.get("after") else 0
-        removed = c["before"].count("\n") + 1 if c.get("before") else 0
-        lines.append(f"{path}: +{added}, -{removed}")
-    return "\n".join(lines)
+
+        path = change.get("path", "unknown_file")
+        before_lines = change.get("before", "").splitlines()
+        after_lines = change.get("after", "").splitlines()
+
+        diff = list(difflib.unified_diff(
+            before_lines,
+            after_lines,
+            fromfile=f"a/{path}",
+            tofile=f"b/{path}",
+            lineterm=""
+        ))
+
+        if not diff:
+            continue
+
+        lines_out.append(f"\n--- Resumen de cambios en: {path} ---")
+
+        if len(diff) > max_lines_per_file:
+            partial_diff = diff[:max_lines_per_file]
+            partial_diff.append(f"... (Se han omitido {len(diff) - max_lines_per_file} líneas) ...")
+        else:
+            partial_diff = diff
+
+        for dline in partial_diff:
+            if total_char_count + len(dline) > max_char_length:
+                lines_out.append("... (Se ha alcanzado el límite de caracteres) ...")
+                break
+            lines_out.append(dline)
+            total_char_count += len(dline)
+
+        displayed_files += 1
+        if total_char_count >= max_char_length:
+            break
+
+    summary = "\n".join(lines_out)
+    return summary.strip()
 
 class ArchitectureEvaluator:
     def __init__(self, config_path=None):
