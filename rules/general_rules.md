@@ -1,5 +1,7 @@
-1. El componente "Dominio" no debe llamar directamente a los Adaptadores Salientes (DB, API, Notificaciones).
-2. La capa "Aplicación" orquesta la ejecución y es la única que invoca el "Dominio" y las interfaces de infraestructura.
-3. Si un elemento o interfaz empieza con "I", pertenece a la capa de Infraestructura (por ejemplo, "IEnviarDinero").
-4. "Dominio" concentra la lógica de negocio y no depende de implementaciones externas.
-5. Cualquier integración con servicios externos (APIs de pago, notificaciones, base de datos) debe encapsularse en Adaptadores Salientes.
+1. Separación de Responsabilidades
+2. Principios SOLID y Clean Code
+3. Bajo Acoplamiento y Alta Cohesión
+4. Estructura y Patrones de Diseño
+5. Excepciones y Errores
+6. Pruebas y Calidad
+7. Cohesión de la Lógica de Negocio

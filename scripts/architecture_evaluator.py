@@ -10,14 +10,24 @@ def load_text_file(path):
     except FileNotFoundError:
         return ""
 
-def azure_openai_inference(prompt, endpoint, api_key, deployment, max_tokens=800):
+def azure_openai_inference(prompt, endpoint, api_key, deployment, max_tokens=8000):
     body = {
         "messages": [
-            {"role": "system", "content": "Eres un software architecture assistant en español."},
-            {"role": "user", "content": prompt}
+            {
+                "role": "system",
+                "content": (
+                    "Eres un asesor experimentado de arquitectura de software "
+                    "que responde en español de forma clara y completa. "
+                    "Tu objetivo es analizar y explicar respetando las reglas que te den."
+                )
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
         ],
         "max_tokens": max_tokens,
-        "temperature": 0.0
+        "temperature": 0.2
     }
     headers = {
         "Content-Type": "application/json",
@@ -31,14 +41,14 @@ def azure_openai_inference(prompt, endpoint, api_key, deployment, max_tokens=800
 def approximate_token_count(text):
     return len(text.split())
 
-def summarize_code_changes(changes, max_tokens=3000):
+def summarize_code_changes(changes, max_tokens=6000):
     lines_out = []
     total_tokens = 0
-
     for change in changes:
         path = change.get("path", "unknown_file")
         before_lines = change.get("before", "").splitlines()
         after_lines = change.get("after", "").splitlines()
+
         diff = list(difflib.unified_diff(
             before_lines,
             after_lines,
@@ -48,10 +58,12 @@ def summarize_code_changes(changes, max_tokens=3000):
         ))
         if not diff:
             continue
+
         header_line = f"\n--- Resumen de cambios en: {path} ---"
         header_tokens = approximate_token_count(header_line)
+
         if total_tokens + header_tokens > max_tokens:
-            lines_out.append("... (Se ha alcanzado el límite de tokens) ...")
+            lines_out.append("... (Se ha alcanzado el límite de tokens en los encabezados) ...")
             break
         lines_out.append(header_line)
         total_tokens += header_tokens
@@ -59,13 +71,14 @@ def summarize_code_changes(changes, max_tokens=3000):
         for dline in diff:
             line_tokens = approximate_token_count(dline)
             if total_tokens + line_tokens > max_tokens:
-                lines_out.append("... (Se ha alcanzado el límite de tokens) ...")
+                lines_out.append("... (Se ha alcanzado el límite de tokens en el diff) ...")
                 break
             lines_out.append(dline)
             total_tokens += line_tokens
 
         if total_tokens >= max_tokens:
             break
+
     return "\n".join(lines_out).strip()
 
 class ArchitectureEvaluator:
@@ -73,7 +86,7 @@ class ArchitectureEvaluator:
         self.endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
         self.api_key = os.environ.get("AZURE_OPENAI_API_KEY", "")
         self.deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "")
-        self.token_limit = int(os.environ.get("TOKEN_LIMIT", "3000"))
+        self.token_limit = int(os.environ.get("TOKEN_LIMIT", "8000"))
         rules_file = os.environ.get("GENERAL_RULES_FILE", "rules/general_rules.md")
         self.general_rules = load_text_file(rules_file)
 
@@ -87,41 +100,36 @@ class ArchitectureEvaluator:
 
     def build_prompt(self, diagram_text, code_summary, features):
         prompt = f"""
-Eres un asesor de arquitectura.
-
-========================================
- Reglas Generales de Arquitectura
-========================================
+REGLAS GENERALES DE ARQUITECTURA:
 {self.general_rules}
 
-========================================
- Requerimientos Específicos (features)
-========================================
+REQUERIMIENTOS ESPECÍFICOS:
 {features}
 
-========================================
- Diagrama (PlantUML)
-========================================
+DIAGRAMA (PlantUML):
 {diagram_text}
 
-========================================
- Cambios detectados
-========================================
+CAMBIOS DETECTADOS:
 {code_summary}
 
-Comenta si viola las reglas y sugiere mejoras.
-Al final, escribe "Score=0.xx" (0=peor, 1=mejor).
-No bloquees el PR, es solo recomendación.
+Instrucciones:
+1. Determina si los cambios violan alguna regla o requerimiento.
+2. Justifica tu respuesta (por qué o por qué no).
+3. Sugiere mejoras concretas si las hay.
 """.strip()
+
         print(f"\n[Prompt generado para Azure OpenAI]:\n{prompt}\n")
         return prompt
 
     def evaluate(self, diagram_text, code_changes, features):
         summary = summarize_code_changes(code_changes)
         prompt = self.build_prompt(diagram_text, summary, features)
-        if len(prompt) > self.token_limit:
-            prompt = prompt[:self.token_limit]
-        return azure_openai_inference(prompt, self.endpoint, self.api_key, self.deployment)
+        if approximate_token_count(prompt) > self.token_limit:
+            print("[DEBUG] El prompt excede el token_limit, se recorta")
+            words = prompt.split()
+            prompt = " ".join(words[:self.token_limit])
+
+        return azure_openai_inference(prompt, self.endpoint, self.api_key, self.deployment, max_tokens=self.token_limit)
 
     def extract_score(self, response):
         match = re.search(r"Score\s*=\s*([\d]+(\.\d+)?)", response)
