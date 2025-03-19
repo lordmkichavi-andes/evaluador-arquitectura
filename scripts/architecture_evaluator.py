@@ -28,14 +28,14 @@ def azure_openai_inference(prompt, endpoint, api_key, deployment, max_tokens=800
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"]
 
-def summarize_code_changes(changes, max_char_length=2000, max_files=10, max_lines_per_file=10):
+def approximate_token_count(text):
+    return len(text.split())
+
+def summarize_code_changes(changes, max_tokens=3000):
     lines_out = []
-    total_char_count = 0
-    displayed_files = 0
-    for i, change in enumerate(changes):
-        if displayed_files >= max_files:
-            lines_out.append(f"... (Existen {len(changes) - i} archivos adicionales) ...")
-            break
+    total_tokens = 0
+
+    for change in changes:
         path = change.get("path", "unknown_file")
         before_lines = change.get("before", "").splitlines()
         after_lines = change.get("after", "").splitlines()
@@ -49,24 +49,22 @@ def summarize_code_changes(changes, max_char_length=2000, max_files=10, max_line
         if not diff:
             continue
         header_line = f"\n--- Resumen de cambios en: {path} ---"
-        if total_char_count + len(header_line) > max_char_length:
-            lines_out.append("... (Se ha alcanzado el límite de caracteres) ...")
+        header_tokens = approximate_token_count(header_line)
+        if total_tokens + header_tokens > max_tokens:
+            lines_out.append("... (Se ha alcanzado el límite de tokens) ...")
             break
         lines_out.append(header_line)
-        total_char_count += len(header_line)
-        if len(diff) > max_lines_per_file:
-            truncated_diff = diff[:max_lines_per_file]
-            truncated_diff.append(f"... (Se han omitido {len(diff) - max_lines_per_file} líneas) ...")
-        else:
-            truncated_diff = diff
-        for dline in truncated_diff:
-            if total_char_count + len(dline) + 1 > max_char_length:
-                lines_out.append("... (Se ha alcanzado el límite de caracteres) ...")
+        total_tokens += header_tokens
+
+        for dline in diff:
+            line_tokens = approximate_token_count(dline)
+            if total_tokens + line_tokens > max_tokens:
+                lines_out.append("... (Se ha alcanzado el límite de tokens) ...")
                 break
             lines_out.append(dline)
-            total_char_count += len(dline) + 1
-        displayed_files += 1
-        if total_char_count >= max_char_length:
+            total_tokens += line_tokens
+
+        if total_tokens >= max_tokens:
             break
     return "\n".join(lines_out).strip()
 
