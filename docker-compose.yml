@@ -1,0 +1,10 @@
+version: "3.9"
+
+services:
+  architecture-eval:
+    build: .
+    container_name: architecture-evaluator
+    ports:
+      - "5013:5013"
+    env_file:
+      - .env
