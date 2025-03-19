@@ -27,12 +27,11 @@ def azure_openai_inference(prompt, endpoint, api_key, deployment, max_tokens=800
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"]
 
-
 def summarize_code_changes(
-        changes,
-        max_char_length=2000,
-        max_files=10,
-        max_lines_per_file=10
+    changes,
+    max_char_length=2000,
+    max_files=10,
+    max_lines_per_file=50
 ):
     lines_out = []
     total_char_count = 0
@@ -58,20 +57,27 @@ def summarize_code_changes(
         if not diff:
             continue
 
-        lines_out.append(f"\n--- Resumen de cambios en: {path} ---")
+        file_header = f"\n--- Resumen de cambios en: {path} ---"
+        if total_char_count + len(file_header) > max_char_length:
+            lines_out.append("... (Se ha alcanzado el límite de caracteres) ...")
+            break
+        lines_out.append(file_header)
+        total_char_count += len(file_header)
 
         if len(diff) > max_lines_per_file:
-            partial_diff = diff[:max_lines_per_file]
-            partial_diff.append(f"... (Se han omitido {len(diff) - max_lines_per_file} líneas) ...")
+            truncated_diff = diff[:max_lines_per_file]
+            truncated_diff.append(
+                f"... (Se han omitido {len(diff) - max_lines_per_file} líneas) ..."
+            )
         else:
-            partial_diff = diff
+            truncated_diff = diff
 
-        for dline in partial_diff:
-            if total_char_count + len(dline) > max_char_length:
+        for dline in truncated_diff:
+            if total_char_count + len(dline) + 1 > max_char_length:
                 lines_out.append("... (Se ha alcanzado el límite de caracteres) ...")
                 break
             lines_out.append(dline)
-            total_char_count += len(dline)
+            total_char_count += len(dline) + 1
 
         displayed_files += 1
         if total_char_count >= max_char_length:
@@ -85,43 +91,69 @@ class ArchitectureEvaluator:
         if not config_path:
             script_dir = os.path.dirname(os.path.realpath(__file__))
             config_path = os.path.join(script_dir, "..", "ArchitectureConfig.json")
+
         with open(config_path, "r", encoding="utf-8") as f:
             self.config = json.load(f)
+
+        script_dir = os.path.dirname(os.path.realpath(__file__))
         self.general_rules = load_text_file(
-            os.path.join(script_dir, "..", self.config.get("general_rules_file", "rules/general_rules.md")))
-        self.requirements = load_text_file(
-            os.path.join(script_dir, "..", self.config.get("requirements_file", "rules/requirements.md")))
+            os.path.join(script_dir, "..", self.config.get("general_rules_file", "rules/general_rules.md"))
+        )
+
         self.endpoint = self.config.get("openai_endpoint", "")
         self.api_key = self.config.get("openai_api_key", "")
         self.deployment = self.config.get("deployment_name", "")
         self.token_limit = self.config.get("token_limit", 3000)
 
-    def build_prompt(self, diagram_text, code_summary):
-        return f"""
-Eres un asesor de arquitectura. 
-Reglas Generales:
+    def build_prompt(self, diagram_text, code_summary, features):
+        prompt = f"""
+Eres un asesor de arquitectura.
+
+========================================
+ Reglas Generales de Arquitectura
+========================================
 {self.general_rules}
-Reglas / Requisitos Específicos:
-{self.requirements}
-Diagrama (PlantUML):
+
+========================================
+ Requerimientos Específicos (features)
+========================================
+{features}
+
+========================================
+ Diagrama (PlantUML)
+========================================
 {diagram_text}
-Cambios detectados:
+
+========================================
+ Cambios detectados
+========================================
 {code_summary}
-Comenta si viola las reglas y sugiere mejoras. 
-Al final, escribe "Score=0.xx" (0=peor,1=mejor). 
+
+Comenta si viola las reglas y sugiere mejoras.
+Al final, escribe "Score=0.xx" (0=peor, 1=mejor).
 No bloquees el PR, es solo recomendación.
 """.strip()
-    def evaluate(self, diagram_text, code_changes):
+
+        return prompt
+
+    def evaluate(self, diagram_text, code_changes, features):
         summary = summarize_code_changes(code_changes)
-        prompt = self.build_prompt(diagram_text, summary)
+
+        prompt = self.build_prompt(diagram_text, summary, features)
+
+        print("------")
+        print(prompt)
+
         if len(prompt) > self.token_limit:
             prompt = prompt[:self.token_limit]
+
         return azure_openai_inference(prompt, self.endpoint, self.api_key, self.deployment)
+
     def extract_score(self, response):
         match = re.search(r"Score\s*=\s*([\d]+(\.\d+)?)", response)
         if match:
             try:
                 return float(match.group(1))
-            except:
+            except ValueError:
                 return 0.0
         return 0.0
