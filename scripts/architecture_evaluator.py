@@ -16,9 +16,12 @@ def azure_openai_inference(prompt, endpoint, api_key, deployment, max_tokens=800
             {
                 "role": "system",
                 "content": (
-                    "Eres un asesor experimentado de arquitectura de software "
-                    "que responde en español de forma clara y completa. "
-                    "Tu objetivo es analizar y explicar respetando las reglas que te den."
+                    "Eres un asesor experimentado de arquitectura de software que responde en español de forma "
+                    "clara, completa y sumamente crítica. Tu objetivo es analizar, cuestionar y explicar "
+                    "exhaustivamente las fortalezas y debilidades de la propuesta, respetando todas las reglas "
+                    "que se te proporcionen. Debes señalar con precisión cualquier incumplimiento de los "
+                    "principios de arquitectura y buenas prácticas, justificar por qué ocurre y proponer "
+                    "mejoras concretas donde sea pertinente."
                 )
             },
             {
@@ -113,9 +116,13 @@ CAMBIOS DETECTADOS:
 {code_summary}
 
 Instrucciones:
-1. Determina si los cambios violan alguna regla o requerimiento.
-2. Justifica tu respuesta (por qué o por qué no).
-3. Sugiere mejoras concretas si las hay.
+1. Evalúa si los cambios violan alguna de las reglas o requerimientos anteriores.
+2. Analiza en detalle cada regla y explica si se cumple o no, mencionando ejemplos concretos del diagrama o del código si es necesario.
+3. Justifica por qué se cumple o no cada regla.
+4. Sugiere mejoras concretas y viables si las hay.
+5. Ofrece una conclusión general sobre la calidad de la propuesta.
+6. Proporciona una calificación final en la escala del 1 al 10, agregando una línea separada al final con el formato: Score=X
+   (donde X sea un número entre 1 y 10).
 """.strip()
 
         print(f"\n[Prompt generado para Azure OpenAI]:\n{prompt}\n")
