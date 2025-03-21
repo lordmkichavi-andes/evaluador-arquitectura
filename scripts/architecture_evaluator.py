@@ -2,6 +2,7 @@ import os
 import re
 import requests
 import difflib
+from flask import Flask, request, jsonify
 
 def load_text_file(path):
     try:
@@ -17,11 +18,16 @@ def azure_openai_inference(prompt, endpoint, api_key, deployment, max_tokens=800
                 "role": "system",
                 "content": (
                     "Eres un asesor experimentado de arquitectura de software que responde en español de forma "
-                    "clara, completa y sumamente crítica. Tu objetivo es analizar, cuestionar y explicar "
-                    "exhaustivamente las fortalezas y debilidades de la propuesta, respetando todas las reglas "
-                    "que se te proporcionen. Debes señalar con precisión cualquier incumplimiento de los "
-                    "principios de arquitectura y buenas prácticas, justificar por qué ocurre y proponer "
-                    "mejoras concretas donde sea pertinente."
+                    "extremadamente detallada y sumamente crítica. Tu objetivo es analizar cada aspecto de la "
+                    "propuesta, basándote en:\n"
+                    "- Las reglas generales de arquitectura.\n"
+                    "- Los requerimientos o feature que se desea resolver.\n"
+                    "- Los cambios específicos en el código.\n\n"
+                    "Tu respuesta debe ser larga, minuciosa y argumentada. En cada aspecto:\n"
+                    "- Explica cualquier incumplimiento o fortaleza, relacionándolo con el diagrama y el código.\n"
+                    "- Justifica por qué ocurre, de manera crítica y específica.\n"
+                    "- Sugiere mejoras técnicas y de diseño cuando sea pertinente.\n"
+                    "Procura detallar las consecuencias de no cumplir las reglas y exponer tanto ventajas como riesgos."
                 )
             },
             {
@@ -30,7 +36,10 @@ def azure_openai_inference(prompt, endpoint, api_key, deployment, max_tokens=800
             }
         ],
         "max_tokens": max_tokens,
-        "temperature": 0.2
+        "temperature": 0.4,
+        "top_p": 1.0,
+        "presence_penalty": 0.0,
+        "frequency_penalty": 0.0
     }
     headers = {
         "Content-Type": "application/json",
@@ -51,7 +60,6 @@ def summarize_code_changes(changes, max_tokens=6000):
         path = change.get("path", "unknown_file")
         before_lines = change.get("before", "").splitlines()
         after_lines = change.get("after", "").splitlines()
-
         diff = list(difflib.unified_diff(
             before_lines,
             after_lines,
@@ -61,16 +69,13 @@ def summarize_code_changes(changes, max_tokens=6000):
         ))
         if not diff:
             continue
-
         header_line = f"\n--- Resumen de cambios en: {path} ---"
         header_tokens = approximate_token_count(header_line)
-
         if total_tokens + header_tokens > max_tokens:
             lines_out.append("... (Se ha alcanzado el límite de tokens en los encabezados) ...")
             break
         lines_out.append(header_line)
         total_tokens += header_tokens
-
         for dline in diff:
             line_tokens = approximate_token_count(dline)
             if total_tokens + line_tokens > max_tokens:
@@ -78,10 +83,8 @@ def summarize_code_changes(changes, max_tokens=6000):
                 break
             lines_out.append(dline)
             total_tokens += line_tokens
-
         if total_tokens >= max_tokens:
             break
-
     return "\n".join(lines_out).strip()
 
 class ArchitectureEvaluator:
@@ -93,56 +96,64 @@ class ArchitectureEvaluator:
         rules_file = os.environ.get("GENERAL_RULES_FILE", "rules/general_rules.md")
         self.general_rules = load_text_file(rules_file)
 
-        print(f"\n[Configuration Loaded]")
-        print(f"AZURE_OPENAI_ENDPOINT: {self.endpoint}")
-        print(f"AZURE_OPENAI_API_KEY: {'***' if self.api_key else '(no key)'}")
-        print(f"AZURE_OPENAI_DEPLOYMENT: {self.deployment}")
-        print(f"TOKEN_LIMIT: {self.token_limit}")
-        print(f"GENERAL_RULES_FILE: {rules_file}")
-        print(f"GENERAL_RULES Loaded?: {'Yes' if self.general_rules else 'No'}\n")
-
     def build_prompt(self, diagram_text, code_summary, features):
-        prompt = f"""
+        return f"""
 REGLAS GENERALES DE ARQUITECTURA:
 {self.general_rules}
 
-REQUERIMIENTOS ESPECÍFICOS:
+REQUERIMIENTOS ESPECÍFICOS (FEATURE):
 {features}
 
 DIAGRAMA (PlantUML):
 {diagram_text}
 
-CAMBIOS DETECTADOS:
+CAMBIOS DETECTADOS (DIFF):
 {code_summary}
 
-Instrucciones:
-1. Evalúa si los cambios violan alguna de las reglas o requerimientos anteriores.
-2. Analiza en detalle cada regla y explica si se cumple o no, mencionando ejemplos concretos del diagrama o del código si es necesario.
-3. Justifica por qué se cumple o no cada regla.
-4. Sugiere mejoras concretas y viables si las hay.
-5. Ofrece una conclusión general sobre la calidad de la propuesta.
-6. Proporciona una calificación final en la escala del 1 al 10, agregando una línea separada al final con el formato: Score=X
-   (donde X sea un número entre 1 y 10).
+Instrucciones Adicionales:
+1. Verifica si estos cambios cumplen o violan las reglas generales de arquitectura y los requerimientos del feature.
+2. Usa ejemplos específicos del código y/o diagrama para justificar cualquier afirmación.
+3. Detalla tanto fortalezas como debilidades con el mayor grado de profundidad posible.
+4. Propón mejoras técnicas concretas en caso de detectar problemas.
+5. Cierra con una visión general de la calidad de la propuesta.
 """.strip()
 
-        print(f"\n[Prompt generado para Azure OpenAI]:\n{prompt}\n")
-        return prompt
-
     def evaluate(self, diagram_text, code_changes, features):
-        summary = summarize_code_changes(code_changes)
+        summary = summarize_code_changes(code_changes, max_tokens=6000)
         prompt = self.build_prompt(diagram_text, summary, features)
         if approximate_token_count(prompt) > self.token_limit:
-            print("[DEBUG] El prompt excede el token_limit, se recorta")
             words = prompt.split()
             prompt = " ".join(words[:self.token_limit])
-
         return azure_openai_inference(prompt, self.endpoint, self.api_key, self.deployment, max_tokens=self.token_limit)
 
-    def extract_score(self, response):
-        match = re.search(r"Score\s*=\s*([\d]+(\.\d+)?)", response)
-        if match:
-            try:
-                return float(match.group(1))
-            except ValueError:
-                return 0.0
-        return 0.0
+app = Flask(__name__)
+
+@app.route("/api/v1/architecture-eval", methods=["POST"])
+def architecture_eval():
+    data = request.json
+    if not data:
+        return jsonify({"error": "No JSON payload received"}), 400
+
+    email_info = data.get("email", {})
+    developer_email = email_info.get("developer", "")
+    leader_email = email_info.get("reviewer", "")
+    diagram_text = data.get("diagram", "")
+    code_changes = data.get("code", [])
+    features = data.get("feature", "")
+
+    evaluator = ArchitectureEvaluator()
+    try:
+        response = evaluator.evaluate(diagram_text, code_changes, features)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    response_data = {
+        "leaderEmail": leader_email,
+        "developerEmail": developer_email,
+        "architectureAnalysis": response
+    }
+
+    return jsonify(response_data), 200
+
+if __name__ == "__main__":
+    app.run(debug=True, host='0.0.0.0', port=5013, use_reloader=False)

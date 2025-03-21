@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
+
 from architecture_evaluator import ArchitectureEvaluator
-import sys
 
 app = Flask(__name__)
 
@@ -31,10 +31,6 @@ def architecture_eval():
     except Exception as e:
         print(f"[ERROR] {str(e)}", flush=True)
         return jsonify({"error": str(e)}), 500
-
-    score = evaluator.extract_score(response)
-    print(f"[DEBUG] Response from evaluator: {response}", flush=True)
-    print(f"[DEBUG] Extracted score: {score}", flush=True)
 
     response_data = {
         "leaderEmail": leader_email,
