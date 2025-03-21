@@ -1,8 +1,9 @@
-import os
-import re
-import requests
 import difflib
+import os
+
+import requests
 from flask import Flask, request, jsonify
+
 
 def load_text_file(path):
     try:
