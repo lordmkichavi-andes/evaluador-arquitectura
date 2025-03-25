@@ -1,9 +1,7 @@
 import difflib
 import os
-
 import requests
 from flask import Flask, request, jsonify
-
 
 def load_text_file(path):
     try:
@@ -17,22 +15,6 @@ def azure_openai_inference(prompt, endpoint, api_key, deployment, max_tokens=800
         "messages": [
             {
                 "role": "system",
-                "content": (
-                    "Eres un asesor experimentado de arquitectura de software que responde en español de forma "
-                    "extremadamente detallada y sumamente crítica. Tu objetivo es analizar cada aspecto de la "
-                    "propuesta, basándote en:\n"
-                    "- Las reglas generales de arquitectura.\n"
-                    "- Los requerimientos o feature que se desea resolver.\n"
-                    "- Los cambios específicos en el código.\n\n"
-                    "Tu respuesta debe ser larga, minuciosa y argumentada. En cada aspecto:\n"
-                    "- Explica cualquier incumplimiento o fortaleza, relacionándolo con el diagrama y el código.\n"
-                    "- Justifica por qué ocurre, de manera crítica y específica.\n"
-                    "- Sugiere mejoras técnicas y de diseño cuando sea pertinente.\n"
-                    "Procura detallar las consecuencias de no cumplir las reglas y exponer tanto ventajas como riesgos."
-                )
-            },
-            {
-                "role": "user",
                 "content": prompt
             }
         ],
@@ -61,13 +43,7 @@ def summarize_code_changes(changes, max_tokens=6000):
         path = change.get("path", "unknown_file")
         before_lines = change.get("before", "").splitlines()
         after_lines = change.get("after", "").splitlines()
-        diff = list(difflib.unified_diff(
-            before_lines,
-            after_lines,
-            fromfile=f"a/{path}",
-            tofile=f"b/{path}",
-            lineterm=""
-        ))
+        diff = list(difflib.unified_diff(before_lines, after_lines, fromfile=f"a/{path}", tofile=f"b/{path}", lineterm=""))
         if not diff:
             continue
         header_line = f"\n--- Resumen de cambios en: {path} ---"
@@ -99,25 +75,29 @@ class ArchitectureEvaluator:
 
     def build_prompt(self, diagram_text, code_summary, features):
         return f"""
-REGLAS GENERALES DE ARQUITECTURA:
-{self.general_rules}
+        Eres un asesor experimentado de arquitectura de software y respondes en español con un nivel de detalle, rigor técnico y perspectiva crítica sumamente altos. 
+        Tu objetivo es evaluar la propuesta basándote en las Reglas Generales de Arquitectura que se te proporcionan, así como en los requerimientos (features) y los cambios de código (diff).
+        Enfatiza tu análisis en aspectos técnicos y concretos relacionados con el Pull Request, el feature, el código modificado y el diagrama; evita respuestas excesivamente generales.
 
-REQUERIMIENTOS ESPECÍFICOS (FEATURE):
-{features}
+        El análisis debe ser exhaustivo y crítico, indicando de forma clara cómo se cumple o se viola cada regla pertinente, siempre que corresponda:
+        - Menciona cualquier fortaleza o incumplimiento que detectes, vinculándolos directamente al PR, al feature, al código y al diagrama.
+        - Justifica de manera técnica por qué ocurre esa observación (positiva o negativa).
+        - Sugiere mejoras de arquitectura o diseño, de ser necesario.
+        - Explica las consecuencias de no atender las reglas, contemplando ventajas y riesgos.
+        - Concluye con una visión general de la calidad de la propuesta y tus conclusiones finales.
 
-DIAGRAMA (PlantUML):
-{diagram_text}
+        **Reglas Generales de Arquitectura (para tu referencia):**
+        {self.general_rules}
 
-CAMBIOS DETECTADOS (DIFF):
-{code_summary}
+        **Requerimientos Específicos (Feature):**
+        {features}
 
-Instrucciones Adicionales:
-1. Verifica si estos cambios cumplen o violan las reglas generales de arquitectura y los requerimientos del feature.
-2. Usa ejemplos específicos del código y/o diagrama para justificar cualquier afirmación.
-3. Detalla tanto fortalezas como debilidades con el mayor grado de profundidad posible.
-4. Propón mejoras técnicas concretas en caso de detectar problemas.
-5. Cierra con una visión general de la calidad de la propuesta.
-""".strip()
+        **Diagrama (PlantUML):**
+        {diagram_text}
+
+        **Cambios Detectados (Diff):**
+        {code_summary}
+        """.strip()
 
     def evaluate(self, diagram_text, code_changes, features):
         summary = summarize_code_changes(code_changes, max_tokens=6000)
@@ -134,26 +114,22 @@ def architecture_eval():
     data = request.json
     if not data:
         return jsonify({"error": "No JSON payload received"}), 400
-
     email_info = data.get("email", {})
     developer_email = email_info.get("developer", "")
     leader_email = email_info.get("reviewer", "")
     diagram_text = data.get("diagram", "")
     code_changes = data.get("code", [])
     features = data.get("feature", "")
-
     evaluator = ArchitectureEvaluator()
     try:
         response = evaluator.evaluate(diagram_text, code_changes, features)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
     response_data = {
         "leaderEmail": leader_email,
         "developerEmail": developer_email,
         "architectureAnalysis": response
     }
-
     return jsonify(response_data), 200
 
 if __name__ == "__main__":
